@@ -11,6 +11,7 @@
 #define VISIBLE_SYMBOLS 3
 #define REELS_COUNT     3
 #define SPIN_DELAY      100000 // マイクロ秒単位 (0.1秒)
+#define WINNING_LINES 5
 
 #define CLEAR       "\033[2J\033[H"
 #define CLEAR_LINE  "\r\033[2K"
@@ -22,7 +23,6 @@
 
 
 const char* symbols[SYMBOLS_COUNT] = {"🦞", "🐧", "🌛", "🐟", "🦑", "🍒", "🐙", "🐟", "🍺", "🐋", "👻", "🍒"};
-
 struct termios orig_termios;
 
 void disableEcho() {
@@ -69,7 +69,7 @@ void displayReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int spinning[REEL
     // スピン完　(0 1 2)
     int visible = 5; // 空白含む各リールのコマ数
 
-    // 半コマ回転
+    // 回転中
     printf(CLEAR);
     printf("Shell Slots\n\n");
     printf(BLUE);
@@ -155,6 +155,36 @@ void spinReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int offsets[REELS_CO
     displayReels(positions, spinning);
 }
 
+
+int checkWinningLines(int positions[REELS_COUNT][VISIBLE_SYMBOLS]) {
+    int winningLines = 0;
+    const int lines[WINNING_LINES][3][2] = {
+        {{0,0}, {1,0}, {2,0}},  // 上段
+        {{0,1}, {1,1}, {2,1}},  // 中段
+        {{0,2}, {1,2}, {2,2}},  // 下段
+        {{0,0}, {1,1}, {2,2}},  // 左上から右下への斜め
+        {{0,2}, {1,1}, {2,0}}   // 左下から右上への斜め
+    };
+
+    for (int i = 0; i < WINNING_LINES; i++) {
+        if (symbols[positions[lines[i][0][0]][lines[i][0][1]]] ==
+            symbols[positions[lines[i][1][0]][lines[i][1][1]]] &&
+            symbols[positions[lines[i][1][0]][lines[i][1][1]]] ==
+            symbols[positions[lines[i][2][0]][lines[i][2][1]]]) {
+            winningLines++;
+            printf("%s揃いライン: ", symbols[positions[lines[i][0][0]][lines[i][0][1]]]);
+            switch(i) {
+                case 0: printf("上段\n"); break;
+                case 1: printf("中段\n"); break;
+                case 2: printf("下段\n"); break;
+                case 3: printf("左上から右下への斜め\n"); break;
+                case 4: printf("左下から右上への斜め\n"); break;
+            }
+        }
+    }
+    return winningLines;
+}
+
 int main() {
     srand(time(NULL));
     disableEcho();  // エコーを無効化
@@ -191,6 +221,12 @@ int main() {
                 spinning[i] = 1;
             }
             spinReels(positions, offsets, spinning);
+
+            // 全てのリールが停止した後に３つ揃い判定
+            int winningLines = checkWinningLines(positions);
+            if (winningLines > 0) {
+                printf("\n%d ラインが揃いました！おめでとうございます！\n", winningLines);
+            }
         }
 
         // 入力バッファをクリア
