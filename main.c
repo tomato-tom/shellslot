@@ -25,6 +25,13 @@ typedef enum {
     AUTO
 } Mode;
 
+typedef struct {
+    int positions[REELS_COUNT][VISIBLE_SYMBOLS];
+    int offsets[REELS_COUNT];
+    int spinning[REELS_COUNT];
+    Mode mode;
+} GameState;
+
 const char* symbols[SYMBOLS_COUNT] = {"🦞", "🐧", "🌛", "🐟", "🦑", "🍒", "🐙", "🐟", "🍺", "🐋", "👻", "🍒"};
 
 // Parse command-line arguments to determine game mode
@@ -137,7 +144,7 @@ void displayHeader() {
 }
 
 // Display stop buttons for reels
-void displayButton(int spinning[REELS_COUNT]) {
+void displayButton(const int spinning[REELS_COUNT]) {
     printf("\t %s(j)%s    %s(k)%s    %s(l)%s\n\n\n",
         spinning[0] ? MAGENTA : BLUE, RESET,
         spinning[1] ? MAGENTA : BLUE, RESET,
@@ -145,8 +152,8 @@ void displayButton(int spinning[REELS_COUNT]) {
 }
 
 // Display the current state of the reels
-void displayReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int spinning[REELS_COUNT]) {
-    int reel_display_lines = 5; // Number of lines per reel, including spaces
+void displayReels(const GameState *state) {
+    const int reel_display_lines = 5; // Number of lines per reel, including spaces
 
     for (int stop = 0; stop < 2; stop++) {
         printf(CLEAR);
@@ -157,10 +164,10 @@ void displayReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int spinning[REEL
         for (int line = 0; line < reel_display_lines; line++) {
             printf("\t");
             for (int reel = 0; reel < REELS_COUNT; reel++) {
-                if (!stop && spinning[reel] && (line % 2)) {
-                    printf("│ %s │ ", symbols[positions[reel][line / 2 + 1]]);
-                } else if ((stop && spinning[reel] && !(line % 2)) || (!spinning[reel] && !(line % 2))) {
-                    printf("│ %s │ ", symbols[positions[reel][line / 2]]);
+                if (!stop && state->spinning[reel] && (line % 2)) {
+                    printf("│ %s │ ", symbols[state->positions[reel][line / 2 + 1]]);
+                } else if ((stop && state->spinning[reel] && !(line % 2)) || (!state->spinning[reel] && !(line % 2))) {
+                    printf("│ %s │ ", symbols[state->positions[reel][line / 2]]);
                 } else {
                     printf("│ 　 │ ");  // Space between symbols
                 }
@@ -170,68 +177,69 @@ void displayReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int spinning[REEL
 
         printf("\t└────┘ └────┘ └────┘\n");
         printf(RESET);
-        displayButton(spinning);
+        displayButton(state->spinning);
 
         usleep(SPIN_DELAY);
     }
 }
 
 // Main game logic for spinning reels
-void spinReels(int mode,
-               int positions[REELS_COUNT][VISIBLE_SYMBOLS],
-               int offsets[REELS_COUNT],
-               int spinning[REELS_COUNT]) {
+void spinReels(GameState *state) {
 
-    while (spinning[0] || spinning[1] || spinning[2]) {
+    while (state->spinning[0] || state->spinning[1] || state->spinning[2]) {
         for (int reel = 0; reel < REELS_COUNT; reel++) {
-            if (spinning[reel]) {
-                offsets[reel] = (offsets[reel] - 1 + SYMBOLS_COUNT) % SYMBOLS_COUNT;
+            if (state->spinning[reel]) {
+                state->offsets[reel] = (state->offsets[reel] - 1 + SYMBOLS_COUNT) % SYMBOLS_COUNT;
                 for (int i = 0; i < VISIBLE_SYMBOLS; i++) {
-                    positions[reel][i] = (offsets[reel] + i) % SYMBOLS_COUNT;
+                    state->positions[reel][i] = (state->offsets[reel] + i) % SYMBOLS_COUNT;
                 }
             }
         }
 
-        displayReels(positions, spinning);
+        displayReels(state);
         usleep(SPIN_DELAY);
 
         if (kbhit()) {
             beep(1);
             char c = getchar();
             if (c == 'q') endGame();
-            else if (c == 'j' && mode == MANUAL) spinning[0] = 0;
-            else if (c == 'k' && mode == MANUAL) spinning[1] = 0;
-            else if (c == 'l' && mode == MANUAL) spinning[2] = 0;
-        } else if (mode != MANUAL) {
+            else if (c == 'j' && state->mode == MANUAL) state->spinning[0] = 0;
+            else if (c == 'k' && state->mode == MANUAL) state->spinning[1] = 0;
+            else if (c == 'l' && state->mode == MANUAL) state->spinning[2] = 0;
+        } else if (state->mode != MANUAL) {
             for (int reel = 0; reel < REELS_COUNT; reel++) {
-                if (spinning[reel] && !(rand() % 5)) {
-                    spinning[reel] = 0;
+                if (state->spinning[reel] && !(rand() % 5)) {
+                    state->spinning[reel] = 0;
                     beep(1);
                     break;
                 }
             }
         }
     }
-    displayReels(positions, spinning);
+    displayReels(state);
 }
 
 // Main game loop
 void startGame(Mode mode) {
-    int positions[REELS_COUNT][VISIBLE_SYMBOLS] = {{0, 1, 2}, {0, 1, 2}, {0, 1, 2}};
-    int offsets[REELS_COUNT] = {0, 0, 0};
-    int spinning[REELS_COUNT] = {0, 0, 0};
+    GameState state = {
+        .positions = {{0, 1, 2}, {0, 1, 2}, {0, 1, 2}},
+        .offsets = {0, 0, 0},
+        .spinning = {0, 0, 0},
+        .mode = mode
+    };
+
     char c;
     char message[100];
 
-    displayReels(positions, spinning);
-    displayModeInstructions(mode);
+    displayReels(&state);
+    displayModeInstructions(state.mode);
 
     c = getchar();
     printf("%sGame started! You pressed '%c'.\n", CLEAR_LINE, c);
     usleep(200000);
 
     while (1) {
-        if (mode == AUTO) {
+        if (state.mode == AUTO) {
             usleep(100000);
             if (kbhit()) {
                 c = getchar();
@@ -242,14 +250,14 @@ void startGame(Mode mode) {
 
         if (c == 'q') break;                     
 
-        if (mode == AUTO || c == ' ') {
+        if (state.mode == AUTO || c == ' ') {
             beep(2);
             for (int i = 0; i < REELS_COUNT; i++) {
-                spinning[i] = 1;
+                state.spinning[i] = 1;
             }
-            spinReels(mode, positions, offsets, spinning);
+            spinReels(&state);
 
-            int winningLines = checkWinningLines(positions);
+            int winningLines = checkWinningLines(state.positions);
             if (winningLines > 0) {
                 snprintf(message, sizeof(message), "\n%s%d line(s) matched! Congratulations!%s\n", MAGENTA, winningLines, RESET);
                 displayMessage(message);
