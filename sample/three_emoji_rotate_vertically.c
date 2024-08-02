@@ -7,10 +7,12 @@
 
 #define SYMBOLS_COUNT 12
 #define VISIBLE_SYMBOLS 3
-#define SPIN_DELAY 300000 // マイクロ秒単位 (0.1秒)
+#define SPIN_DELAY 100000 // マイクロ秒単位 (0.1秒)
 
 #define CLEAR "\033[2J\033[H"
 #define CLEAR_LINE "\r\033[2K"
+#define SHOW_CURSOR "\e[?25h"
+#define HIDE_CURSOR "\e[?25l"
 #define BLUE "\033[34m"
 #define RESET "\033[39m"
 
@@ -53,11 +55,12 @@ void displayReel(int positions[VISIBLE_SYMBOLS], int spinning) {
         printf("\t│    │\n");
         printf("\t│ %s │\n", symbols[positions[2]]);
         printf("\t│    │\n");
-        printf("\t└────┘\n");
+        printf("\t└────┘\n\n");
         printf(RESET);
     }
 
     usleep(SPIN_DELAY);
+
     printf(CLEAR);
     printf("Shell Slots\n\n");
     printf(BLUE);
@@ -106,6 +109,7 @@ int spinReel(int offset) {
 
 int main() {
     srand(time(NULL));
+    printf(HIDE_CURSOR); // カーソル非表示
 
     char input;
     int positions[VISIBLE_SYMBOLS] = {0, 1, 2};
@@ -142,6 +146,7 @@ int main() {
         }
     }
 
+    printf(SHOW_CURSOR);
     printf(CLEAR_LINE);
     printf("プログラムを終了します。\n");
     return 0;

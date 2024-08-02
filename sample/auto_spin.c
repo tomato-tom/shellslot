@@ -1,4 +1,4 @@
-// リールを追加して３つに
+// 自動プレイ
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,11 +7,12 @@
 #include <termios.h>
 #include <fcntl.h>
 
+#define GAMES           100
 #define SYMBOLS_COUNT   12
 #define VISIBLE_SYMBOLS 3
 #define REELS_COUNT     3
-#define SPIN_DELAY      100000 // マイクロ秒単位 (0.1秒)
-#define WINNING_LINES 5
+#define SPIN_DELAY      30000 // マイクロ秒単位 (0.03秒)
+#define WINNING_LINES   5
 
 #define CLEAR       "\033[2J\033[H"
 #define CLEAR_LINE  "\r\033[2K"
@@ -72,76 +73,64 @@ void beep(int count) {
 }
 
 void displayHeader() {
-    printf("  ❍❍❍❍❍❍❍❍❍❍❍❍❍❍\n\n");
-    printf("    %sSHELL SLOT%s\n\n", MAGENTA, RESET);
-    printf("  ❍❍❍❍❍❍❍❍❍❍❍❍❍❍\n\n");
+    printf("\n\t   %sSHELL SLOT%s\n", MAGENTA, RESET);
+    printf("\t❍ ❍  ❍   ❍  ❍ ❍ ❍❍❍❍\n\n");
 }
 
 void displayButton(int spinning[REELS_COUNT]) {
     // リールの状態によって停止キー表示の色を変更
-    printf("\t %s(j)%s    %s(k)%s    %s(l)%s\n\n\n",
+    printf("\t %s(j)%s    %s(k)%s    %s(l)%s    (Ctrl-c)で終了\n\n\n",
         spinning[0] ? MAGENTA : BLUE, RESET,
         spinning[1] ? MAGENTA : BLUE, RESET,
         spinning[2] ? MAGENTA : BLUE, RESET);
 }
 
 void displayReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int spinning[REELS_COUNT]) {
-    // positions
-    // スピン中　( 1 2 )
-    // スピン完　(0 1 2)
-    int visible = 5; // 空白含む各リールのコマ数
+    // 状態別のリール絵文字表示
+    //
+    // スピン中(stop: 0) スピンリール(spinning[reel])  奇数ライン (絵文字)
+    // スピン中(stop: 0) 停止リール(!spinning[reel])   偶数ライン (絵文字)
+    // スピン中(stop: 0) スピンリール(spinning[reel])  偶数ライン (空白)
+    // スピン中(stop: 0) 停止リール(!spinning[reel])   奇数ライン (空白)
+    //
+    // スピン完(stop: 1) スピンリール(spinning[reel])  偶数ライン (絵文字)
+    // スピン完(stop: 1) 停止リール(!spinning[reel])   偶数ライン (絵文字)
+    // スピン完(stop: 1) スピンリール(spinning[reel])  奇数ライン (空白)
+    // スピン完(stop: 1) 停止リール(!spinning[reel])   奇数ライン (空白)
 
-    // 回転中
-    printf(CLEAR);
-    displayHeader();
-    printf(BLUE);
-    printf("\t┌────┐ ┌────┐ ┌────┐\n");
+    int reel_display_lines = 5; // 空白含む各リールのコマ数
 
-    for (int v = 0; v < visible; v++) {
-        printf("\t");
-        for (int reel = 0; reel < REELS_COUNT; reel++) {
-            if (spinning[reel] && (v % 2)) {
-                printf("│ %s │ ", symbols[positions[reel][v / 2 + 1]]); // スピン中奇数ライン(1, 3)
-            } else if (!spinning[reel] && !(v % 2)) {
-                printf("│ %s │ ", symbols[positions[reel][v / 2]]); // 停止中偶数ライン(0, 2, 4)
-            } else {
-                printf("│ 　 │ ");  // シンボル間の空白
+    // リール表示
+    for (int stop = 0; stop < 2; stop++) {
+        printf(CLEAR);
+        displayHeader();
+        printf(BLUE);
+        printf("\t┌────┐ ┌────┐ ┌────┐\n");
+
+        // リール内の絵文字表示
+        for (int line = 0; line < reel_display_lines; line++) {
+            printf("\t");
+            for (int reel = 0; reel < REELS_COUNT; reel++) {
+                if (!stop && spinning[reel] && (line % 2)) {
+                    printf("│ %s │ ", symbols[positions[reel][line / 2 + 1]]);
+                } else if ((stop && spinning[reel] && !(line % 2)) || (!spinning[reel] && !(line % 2))) {
+                    printf("│ %s │ ", symbols[positions[reel][line / 2]]);
+                } else {
+                    printf("│ 　 │ ");  // シンボル間の空白
+                }
             }
+            printf("\n");
         }
-        printf("\n");
+
+        printf("\t└────┘ └────┘ └────┘\n");
+        printf(RESET);
+        displayButton(spinning);
+
+        usleep(SPIN_DELAY);
     }
-
-    printf("\t└────┘ └────┘ └────┘\n");
-    printf(RESET);
-    displayButton(spinning);
-
-    usleep(SPIN_DELAY);
-    
-    // 回転完了
-    printf(CLEAR);
-    displayHeader();
-    printf(BLUE);
-    printf("\t┌────┐ ┌────┐ ┌────┐\n");
-
-    for (int v = 0; v < visible; v++) {
-        printf("\t");
-        for (int reel = 0; reel < REELS_COUNT; reel++) {
-            if (!(v % 2)) {
-                printf("│ %s │ ", symbols[positions[reel][v / 2]]); // 停止中偶数ライン(0, 2, 4)
-            } else {
-                printf("│ 　 │ ");  // シンボル間の空白
-            }
-        }
-        printf("\n");
-    }
-
-    printf("\t└────┘ └────┘ └────┘\n");
-    printf(RESET);
-    displayButton(spinning);
 }
 
 void spinReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int offsets[REELS_COUNT], int spinning[REELS_COUNT]) {
-    // いずれかのリール回転の有効中はループ継続
     while (spinning[0] || spinning[1] || spinning[2]) {
         for (int reel = 0; reel < REELS_COUNT; reel++) {
             if (spinning[reel]) {
@@ -154,17 +143,19 @@ void spinReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int offsets[REELS_CO
 
         // リール表示更新
         displayReels(positions, spinning);
-        usleep(SPIN_DELAY);
-
-        // 停止キー押されたか？
-        if (kbhit()) {
-            char key = getchar();
-            if (key == 'j') spinning[0] = 0;
-            else if (key == 'k') spinning[1] = 0;
-            else if (key == 'l') spinning[2] = 0;
-            beep(1);
-            fflush(stdout);
+        
+        // 停止フラグ抽選
+        for (int reel = 0; reel < REELS_COUNT; reel++) {
+            if (spinning[reel]) {
+                if (!(rand() % 5)) {
+                    spinning[reel] = 0;
+                    beep(1);
+                    fflush(stdout);
+                    break;
+                }
+            }
         }
+
     }
     // すべてのリール停止後にもう一度更新して停止キーの色をリセット
     displayReels(positions, spinning);
@@ -213,31 +204,19 @@ int main() {
 
     displayReels(positions, spinning);
 
-    while (1) {
-        printf("\rスペースキーでリール回転、停止キー(j, k, l)、'q'で終了: ");
-        fflush(stdout);
+    for (int game = 0; game < GAMES; game++) {
 
-        while (!kbhit()) {
-            usleep(100000);  // CPUの使用率を下げるため、短い休止を入れる
+        usleep(10000);  // CPUの使用率を下げるため、短い休止を入れる
+
+        for (int i = 0; i < REELS_COUNT; i++) {
+            spinning[i] = 1;
         }
+        spinReels(positions, offsets, spinning);
 
-        input = getchar();
-
-        // キー入力をチェック
-        if (input == 'q') {
-            break;                     // ループを抜けてプログラムを終了
-        } else if (input == ' ') {
-            beep(2);
-            for (int i = 0; i < REELS_COUNT; i++) {
-                spinning[i] = 1;
-            }
-            spinReels(positions, offsets, spinning);
-
-            // 全てのリールが停止した後に３つ揃い判定
-            int winningLines = checkWinningLines(positions);
-            if (winningLines > 0) {
-                printf("\n%s%d ラインが揃いました！おめでとうございます！%s\n",MAGENTA, winningLines, RESET);
-            }
+        // 全てのリールが停止した後に３つ揃い判定
+        int winningLines = checkWinningLines(positions);
+        if (winningLines > 0) {
+            printf("\n%s%d ラインが揃いました！おめでとうございます！%s\n",MAGENTA, winningLines, RESET);
         }
 
         // 入力バッファをクリア

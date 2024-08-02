@@ -1,17 +1,14 @@
-// リールを追加して３つに
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <termios.h>
-#include <fcntl.h>
+#include "terminal_utils.h"
 
 #define SYMBOLS_COUNT   12
 #define VISIBLE_SYMBOLS 3
 #define REELS_COUNT     3
-#define SPIN_DELAY      100000 // マイクロ秒単位 (0.1秒)
-#define WINNING_LINES 5
+#define SPIN_DELAY      30000 // マイクロ秒単位 (0.03秒)
+#define WINNING_LINES   5
 
 #define CLEAR       "\033[2J\033[H"
 #define CLEAR_LINE  "\r\033[2K"
@@ -21,60 +18,20 @@
 #define MAGENTA     "\033[35m"
 #define RESET       "\033[39m"
 
-
 const char* symbols[SYMBOLS_COUNT] = {"🦞", "🐧", "🌛", "🐟", "🦑", "🍒", "🐙", "🐟", "🍺", "🐋", "👻", "🍒"};
-struct termios orig_termios;
 
-void disableEcho() {
-    struct termios new_termios;
-
-    // 現在の端末設定を保存
-    tcgetattr(STDIN_FILENO, &orig_termios);
-    new_termios = orig_termios;
-
-    // エコーをオフにする
-    new_termios.c_lflag &= ~(ICANON | ECHO);
-
-    // 即座に適用
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
-}
-
-void restoreTerminal() {
-    // 元の端末設定に戻す
-    tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
-}
-
-int kbhit() {
-    int ch;
-    int oldf;
-
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-
-    ch = getchar();
-
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-
-    if(ch != EOF) {
-        ungetc(ch, stdin);
-        return 1;
-    }
-
-    return 0;
-}
 
 void beep(int count) {
     for (int i = 0; i < count; i++) {
         printf("\a");
         fflush(stdout);
-        usleep(100000);
+        usleep(150000);
     }
 }
 
 void displayHeader() {
-    printf("  ❍❍❍❍❍❍❍❍❍❍❍❍❍❍\n\n");
-    printf("    %sSHELL SLOT%s\n\n", MAGENTA, RESET);
-    printf("  ❍❍❍❍❍❍❍❍❍❍❍❍❍❍\n\n");
+    printf("\n\t   %sSHELL SLOT%s\n", MAGENTA, RESET);
+    printf("\t❍ ❍  ❍   ❍  ❍ ❍ ❍❍❍❍\n\n");
 }
 
 void displayButton(int spinning[REELS_COUNT]) {
@@ -86,62 +43,40 @@ void displayButton(int spinning[REELS_COUNT]) {
 }
 
 void displayReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int spinning[REELS_COUNT]) {
-    // positions
-    // スピン中　( 1 2 )
-    // スピン完　(0 1 2)
-    int visible = 5; // 空白含む各リールのコマ数
+    int reel_display_lines = 5; // 空白含む各リールのコマ数
 
-    // 回転中
-    printf(CLEAR);
-    displayHeader();
-    printf(BLUE);
-    printf("\t┌────┐ ┌────┐ ┌────┐\n");
+    // リール表示
+    for (int stop = 0; stop < 2; stop++) {
+        printf(CLEAR);
+        displayHeader();
+        printf(BLUE);
+        printf("\t┌────┐ ┌────┐ ┌────┐\n");
 
-    for (int v = 0; v < visible; v++) {
-        printf("\t");
-        for (int reel = 0; reel < REELS_COUNT; reel++) {
-            if (spinning[reel] && (v % 2)) {
-                printf("│ %s │ ", symbols[positions[reel][v / 2 + 1]]); // スピン中奇数ライン(1, 3)
-            } else if (!spinning[reel] && !(v % 2)) {
-                printf("│ %s │ ", symbols[positions[reel][v / 2]]); // 停止中偶数ライン(0, 2, 4)
-            } else {
-                printf("│ 　 │ ");  // シンボル間の空白
+        // リール内の絵文字表示
+        for (int line = 0; line < reel_display_lines; line++) {
+            printf("\t");
+            for (int reel = 0; reel < REELS_COUNT; reel++) {
+                if (!stop && spinning[reel] && (line % 2)) {
+                    printf("│ %s │ ", symbols[positions[reel][line / 2 + 1]]);
+                } else if ((stop && spinning[reel] && !(line % 2)) || (!spinning[reel] && !(line % 2))) {
+                    printf("│ %s │ ", symbols[positions[reel][line / 2]]);
+                } else {
+                    printf("│ 　 │ ");  // シンボル間の空白
+                }
             }
+            printf("\n");
         }
-        printf("\n");
+
+        printf("\t└────┘ └────┘ └────┘\n");
+        printf(RESET);
+        displayButton(spinning);
+
+        usleep(SPIN_DELAY);
     }
-
-    printf("\t└────┘ └────┘ └────┘\n");
-    printf(RESET);
-    displayButton(spinning);
-
-    usleep(SPIN_DELAY);
-    
-    // 回転完了
-    printf(CLEAR);
-    displayHeader();
-    printf(BLUE);
-    printf("\t┌────┐ ┌────┐ ┌────┐\n");
-
-    for (int v = 0; v < visible; v++) {
-        printf("\t");
-        for (int reel = 0; reel < REELS_COUNT; reel++) {
-            if (!(v % 2)) {
-                printf("│ %s │ ", symbols[positions[reel][v / 2]]); // 停止中偶数ライン(0, 2, 4)
-            } else {
-                printf("│ 　 │ ");  // シンボル間の空白
-            }
-        }
-        printf("\n");
-    }
-
-    printf("\t└────┘ └────┘ └────┘\n");
-    printf(RESET);
-    displayButton(spinning);
 }
 
 void spinReels(int positions[REELS_COUNT][VISIBLE_SYMBOLS], int offsets[REELS_COUNT], int spinning[REELS_COUNT]) {
-    // いずれかのリール回転の有効中はループ継続
+    // いずれかのリールのスピン有効中はループ継続
     while (spinning[0] || spinning[1] || spinning[2]) {
         for (int reel = 0; reel < REELS_COUNT; reel++) {
             if (spinning[reel]) {
@@ -204,7 +139,7 @@ int checkWinningLines(int positions[REELS_COUNT][VISIBLE_SYMBOLS]) {
 int main() {
     srand(time(NULL));
     disableEcho();  // エコーを無効化
-    printf(HIDE_CURSOR);
+    printf(HIDE_CURSOR); // カーソル非表示
 
     int positions[REELS_COUNT][VISIBLE_SYMBOLS] = {{0, 1, 2}, {0, 1, 2}, {0, 1, 2}};
     int offsets[REELS_COUNT] = {0, 0, 0};
