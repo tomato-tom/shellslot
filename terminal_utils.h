@@ -4,5 +4,6 @@
 void disableEcho();
 void restoreTerminal();
 int kbhit();
+void printUsage();
 
 #endif // TERMINAL_UTILS_H

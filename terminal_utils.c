@@ -9,19 +9,19 @@ struct termios orig_termios;
 void disableEcho() {
     struct termios new_termios;
 
-    // 現在の端末設定を保存
+    // Save current terminal settings
     tcgetattr(STDIN_FILENO, &orig_termios);
     new_termios = orig_termios;
 
-    // エコーをオフにする
+    // Turn off echo
     new_termios.c_lflag &= ~(ICANON | ECHO);
 
-    // 即座に適用
+    // Apply changes immediately
     tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
 }
 
 void restoreTerminal() {
-    // 元の端末設定に戻す
+    // Restore original terminal settings
     tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
 }
 
@@ -29,11 +29,15 @@ int kbhit() {
     int ch;
     int oldf;
 
+    // Get current file status flags
     oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    
+    // Set non-blocking mode
     fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 
     ch = getchar();
 
+    // Restore original file status flags
     fcntl(STDIN_FILENO, F_SETFL, oldf);
 
     if(ch != EOF) {
@@ -42,4 +46,11 @@ int kbhit() {
     }
 
     return 0;
+}
+
+void printUsage() {
+    printf("Usage:\n");
+    printf("  ./slot                 : Manual mode\n");
+    printf("  ./slot --autostop (-s) : Semi-automatic mode\n");
+    printf("  ./slot --auto     (-a) : Automatic mode\n");
 }
